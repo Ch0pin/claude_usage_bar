@@ -4,6 +4,7 @@ An unofficial native macOS menu-bar app that shows how much of your Claude plan'
 
 ![macOS](https://img.shields.io/badge/macOS-13%2B-black)
 ![Swift](https://img.shields.io/badge/Swift-6-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 ## What it shows
 
@@ -74,3 +75,7 @@ The app reads Claude Code's existing sign-in. It looks first in the macOS Keycha
 The OAuth usage endpoint is undocumented and may change without notice. This project is unofficial and is not affiliated with or endorsed by Anthropic. Usage limits are reported only for Claude subscription plans, not API-key billing.
 
 The generated app is ad-hoc signed for local use.
+
+## License
+
+[MIT](LICENSE)
