@@ -9,6 +9,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model: UsageViewModel!
     private var cancellables = Set<AnyCancellable>()
     private var appearanceObservation: NSKeyValueObservation?
+    private var lastAppearanceIsDark: Bool?
+    private var lastRendered: RenderedState?
+
+    /// Everything that affects what the status item looks like. Redraws are
+    /// skipped when this is unchanged.
+    private struct RenderedState: Equatable {
+        let gauge: Gauge
+        let text: String?
+        let tooltip: String
+        let isDark: Bool
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         model = UsageViewModel()
@@ -19,9 +30,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(togglePopover(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
-            // Redraw when the menu bar switches between light and dark.
-            appearanceObservation = button.observe(\.effectiveAppearance) { [weak self] _, _ in
-                DispatchQueue.main.async { self?.updateStatusItem() }
+            // Redraw only when the menu bar actually switches between light
+            // and dark. Updating the button's image or title re-sends this KVO
+            // notification even though the appearance is unchanged, so reacting
+            // to every notification would redraw in an endless loop.
+            appearanceObservation = button.observe(\.effectiveAppearance) { [weak self] button, _ in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    let isDark = Self.isDark(button.effectiveAppearance)
+                    guard isDark != self.lastAppearanceIsDark else { return }
+                    self.lastAppearanceIsDark = isDark
+                    self.updateStatusItem()
+                }
             }
         }
 
@@ -44,12 +64,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusItem() {
         guard let button = statusItem?.button, let model else { return }
 
-        button.image = GaugeRenderer.image(for: model.gauge)
+        let state = RenderedState(
+            gauge: model.gauge,
+            text: model.showPercentage ? model.menuBarText : nil,
+            tooltip: model.tooltip,
+            isDark: Self.isDark(button.effectiveAppearance)
+        )
+        guard state != lastRendered else { return }
+        lastRendered = state
 
-        if model.showPercentage {
+        button.image = GaugeRenderer.image(for: state.gauge)
+
+        if let text = state.text {
             button.imagePosition = .imageLeading
             button.attributedTitle = NSAttributedString(
-                string: " " + model.menuBarText,
+                string: " " + text,
                 attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .medium)]
             )
         } else {
@@ -57,8 +86,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.attributedTitle = NSAttributedString(string: "")
         }
 
-        button.toolTip = model.tooltip
+        button.toolTip = state.tooltip
         button.setAccessibilityLabel("Claude usage \(model.menuBarText) remaining")
+    }
+
+    private static func isDark(_ appearance: NSAppearance) -> Bool {
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
